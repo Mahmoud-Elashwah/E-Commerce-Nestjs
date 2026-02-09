@@ -20,7 +20,6 @@ export class User {
     required: true,
     type: String,
     minlength: [3, 'password must be at least 3 characters'],
-    maxlength: [30, 'password must be at least 30 characters'],
   })
   password: string;
   @Prop({
@@ -39,17 +38,17 @@ export class User {
   })
   age: number;
   @Prop({
-    type: Number,
+    type: String,
     length: 11,
   })
-  phoneNumber: number;
+  phoneNumber: string;
   @Prop({
     type: String,
   })
   address: string;
   @Prop({
     type: Boolean,
-    enum: [true, false],
+    default: true,
   })
   active: boolean;
   @Prop({
@@ -61,6 +60,11 @@ export class User {
     enum: ['male', 'female'],
   })
   gender: string;
+  @Prop({ type: String })
+  resetPasswordToken?: string;
+
+  @Prop({ type: Date })
+  resetPasswordExpires?: Date;
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);

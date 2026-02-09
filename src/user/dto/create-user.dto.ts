@@ -3,70 +3,78 @@ import {
   IsEmail,
   IsEnum,
   IsNumber,
+  IsOptional,
   IsPhoneNumber,
   IsString,
   IsUrl,
   Length,
-  Max,
   MaxLength,
-  min,
-  Min,
   MinLength,
+  Min,
+  IsNotEmpty,
 } from 'class-validator';
 
 export class CreateUserDto {
-  //name
-  @IsString({ message: 'Name must be a String' })
+  // name - required
+  @IsString({ message: 'Name must be a string' })
+  @IsNotEmpty({ message: 'Name is required' })
   @MinLength(3, { message: 'Name must be at least 3 characters' })
-  @MaxLength(30, { message: 'Name must be at most 3 characters' })
+  @MaxLength(30, { message: 'Name must be at most 30 characters' })
   name: string;
 
-  //email
-  @IsString({ message: 'email must be a String' })
+  // email - required
   @IsEmail({}, { message: 'Email is not valid' })
-  @MinLength(0, { message: 'The Email must be required' })
+  @IsString({ message: 'Email must be a string' })
+  @IsNotEmpty({ message: 'Email is required' })
   email: string;
 
-  //password
-  @IsString({ message: 'Password must be a String' })
-  @MinLength(3, { message: 'Password must be at least 3 characters' })
-  @MaxLength(30, { message: 'Password must be at most 3 characters' })
+  // password - required
+  @IsString({ message: 'Password must be a string' })
+  @IsNotEmpty({ message: 'Password is required' })
+  @MinLength(5, { message: 'Password must be at least 5 characters' })
   password: string;
 
-  //role
-  @IsEnum(['admin', 'admin'], { message: 'Role must be user or admin' })
-  role: string;
+  // role - optional
+  @IsEnum(['user', 'admin'], { message: 'Role must be either user or admin' })
+  @IsOptional()
+  role?: string;
 
-  // avatar
-  @IsString({ message: 'avatar must be a String' })
-  @IsUrl({}, { message: 'avatar must be a valid URL' })
-  avatar: string;
+  // avatar - optional
+  @IsUrl({}, { message: 'Avatar must be a valid URL' })
+  @IsOptional()
+  avatar?: string;
 
-  // age
-  @IsNumber({}, { message: 'age must be a Number' })
-  @Min(18, { message: 'age must be at least 18 years old' })
-  age: number;
+  // age - optional
+  @IsNumber({}, { message: 'Age must be a number' })
+  @Min(18, { message: 'Age must be at least 18' })
+  @IsOptional()
+  age?: number;
 
-  // phoneNumber
-  @IsNumber({}, { message: 'PhoneNumber must be a Number' })
-  @IsPhoneNumber('EG', { message: 'phone number not valid' })
-  phoneNumber: number;
+  // phoneNumber - optional
+  @IsPhoneNumber('EG', { message: 'Phone number is not valid' })
+  @IsOptional()
+  phoneNumber?: string;
 
-  // address
-  @IsString({ message: 'address must be a String' })
-  address: string;
+  // address - optional
+  @IsString({ message: 'Address must be a string' })
+  @IsOptional()
+  address?: string;
 
-  //   active
-  @IsBoolean({ message: 'Active must be boolean' })
-  @IsEnum([true, false], { message: 'active must be true or false' })
-  active: boolean;
+  // active - optional
+  @IsBoolean({ message: 'Active must be true or false' })
+  @IsOptional()
+  active?: boolean;
 
-  // VerificationCode
-  @IsString({ message: 'VerificationCode must be a String' })
-  @Length(6, 6, { message: 'VerificationCode must be at least 6 characters' })
-  VerificationCode: string;
+  // verificationCode - optional
+  @IsString({ message: 'Verification code must be a string' })
+  @Length(6, 6, { message: 'Verification code must be exactly 6 characters' })
+  @IsOptional()
+  verificationCode?: string;
 
-  // gender
-  @IsEnum(['male', 'female'], { message: 'gender must be male or female' })
-  gender: string;
+  // gender - optional
+  @IsEnum(['male', 'female'], {
+    message: 'Gender must be either male or female',
+  })
+  @IsOptional()
+  gender?: string;
 }
