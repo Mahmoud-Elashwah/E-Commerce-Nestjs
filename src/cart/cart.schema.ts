@@ -1,9 +1,10 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import mongoose, { HydratedDocument } from 'mongoose';
+import mongoose, { HydratedDocument, mongo, Types } from 'mongoose';
+import { Coupon } from 'src/coupon/coupon.schema';
 import { Product } from 'src/product/product.schema';
 import { User } from 'src/user/user.schema';
 
-export type cartDocument = HydratedDocument<Cart>;
+export type CartDocument = HydratedDocument<Cart>;
 
 @Schema({ timestamps: true })
 export class Cart {
@@ -12,63 +13,52 @@ export class Cart {
       {
         productId: {
           type: mongoose.Schema.Types.ObjectId,
-          require: true,
           ref: Product.name,
+          required: true,
         },
-        quantity: {
-          type: Number,
-          default: 1,
-        },
-        color: {
-          type: String,
-          default: '',
-        },
+        quantity: { type: Number, default: 1 },
+        price: { type: Number, required: true },
       },
     ],
+    default: [],
   })
-  cartItems: [
-    {
-      productId: {
-        _id: string;
-        price: number;
-        priceAfterDiscount: number;
-      };
-      quantity: number;
-      color: string;
-    },
-  ];
+  cartItems: {
+    productId: string;
+    quantity: number;
+    price: number;
+  }[];
 
   @Prop({
     type: Number,
-    required: true,
+    default: 0,
   })
   totalPrice: number;
+
   @Prop({
     type: Number,
   })
   totalPriceAfterDiscount: number;
 
   @Prop({
-    type: [
-      {
-        name: {
-          type: String,
-        },
-      },
-    ],
-  })
-  coupons: [
-    {
-      name: string;
-      couponId: string;
+    type: {
+      couponId: { type: mongoose.Schema.Types.ObjectId, ref: Coupon.name },
+      name: { type: String },
+      discount: { type: Number },
     },
-  ];
+  })
+  coupon?: {
+    name: string;
+    couponId: Types.ObjectId;
+    discount: number;
+  };
 
   @Prop({
     type: mongoose.Schema.Types.ObjectId,
     ref: User.name,
+    required: true,
+    unique: true,
   })
-  user: typeof User;
+  userId: string;
 }
 
 export const cartSchema = SchemaFactory.createForClass(Cart);

@@ -7,15 +7,13 @@ export type subCategoryDocument = HydratedDocument<SubCategory>;
 @Schema({ timestamps: true })
 export class SubCategory {
   @Prop({
-    type: String,
     required: true,
-    min: [3, 'Name must be at least 3 characters'],
-    max: [30, 'Name must be at most 30 characters'],
+    type: String,
+    unique: true,
   })
   name: string;
-
   @Prop({
-    type: mongoose.Schema.Types.ObjectId,
+    type: mongoose.Schema.ObjectId,
     ref: Category.name,
     required: true,
   })

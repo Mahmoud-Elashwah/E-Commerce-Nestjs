@@ -8,112 +8,46 @@ import {
   Delete,
   UseGuards,
   Req,
-  UnauthorizedException,
-  ValidationPipe,
 } from '@nestjs/common';
 import { CartService } from './cart.service';
-import { UpdateCartItemsDto } from './dto/update-cart-items.dto';
-import { Roles } from 'src/user/decorators/roles.decorator';
+import { CreateCartDto } from './dto/create-cart.dto';
+import { UpdateCartDto } from './dto/update-cart.dto';
 import { AuthGuard } from 'src/user/guard/auth.guard';
+import { Roles } from 'src/user/decorators/roles.decorator';
 
-@Controller('v1/cart')
+@Controller('cart')
 export class CartController {
   constructor(private readonly cartService: CartService) {}
-  // ======== For User ========== \\
 
-  //  @docs   Can Only User Logged Create Cart and add products in cart
-  //  @Route  POST /api/v1/cart/:productId
-  //  @access Private [User]
-  @Post(':productId')
-  @Roles(['user'])
+  @Post()
   @UseGuards(AuthGuard)
-  create(@Param('productId') productId: string, @Req() req) {
-    if (req.user.role.toLowerCase() === 'admin') {
-      throw new UnauthorizedException();
-    }
-    const user_id = req.user._id;
-    return this.cartService.create(productId, user_id);
+  @Roles(['user'])
+  addToCart(@Body() createCartDto: CreateCartDto, @Req() req) {
+    return this.cartService.addToCart(createCartDto, req.user._id);
   }
 
-  //  @docs   Can Only User Apply Coupons
-  //  @Route  POST /api/v1/cart/coupon
-  //  @access Private [User]
-  @Post('/coupon/:couponName')
-  @Roles(['user'])
+  @Get(':id')
   @UseGuards(AuthGuard)
-  applyCoupon(@Param('couponName') couponName: string, @Req() req) {
-    if (req.user.role.toLowerCase() === 'admin') {
-      throw new UnauthorizedException();
-    }
-    const user_id = req.user._id;
-    return this.cartService.applyCoupon(user_id, couponName);
+  @Roles(['user', 'admin'])
+  findOne(@Param('id') id: string, @Req() req) {
+    return this.cartService.findOne(id, req.user);
   }
 
-  //  @docs   Can Only User Get Cart
-  //  @Route  GET /api/v1/cart
-  //  @access Private [User]
-  @Get()
-  @Roles(['user'])
-  @UseGuards(AuthGuard)
-  findOneForUser(@Req() req) {
-    if (req.user.role.toLowerCase() === 'admin') {
-      throw new UnauthorizedException();
-    }
-    const user_id = req.user._id;
-    return this.cartService.findOne(user_id);
-  }
-
-  //  @docs   Can Only User update cartItems
-  //  @Route  PATCH /api/v1/cart/:productId
-  //  @access Private [User]
   @Patch(':productId')
-  @Roles(['user'])
   @UseGuards(AuthGuard)
+  @Roles(['user'])
   update(
     @Param('productId') productId: string,
-    @Body(new ValidationPipe({ forbidNonWhitelisted: true, whitelist: true }))
-    updateCartItemsDto: UpdateCartItemsDto,
+    @Body() updateCartDto: UpdateCartDto,
     @Req() req,
   ) {
-    if (req.user.role.toLowerCase() === 'admin') {
-      throw new UnauthorizedException();
-    }
-    const user_id = req.user._id;
-    return this.cartService.update(productId, user_id, updateCartItemsDto);
+    return this.cartService.update(productId, updateCartDto, req.user._id);
   }
 
-  //  @docs   Can Only User delete cartItems
-  //  @Route  DELETE /api/v1/cart/:productId
-  //  @access Private [User]
-  @Delete(':productId')
+  @Delete(':itemId')
+  @UseGuards(AuthGuard)
   @Roles(['user'])
-  @UseGuards(AuthGuard)
-  remove(@Param('productId') productId: string, @Req() req) {
-    if (req.user.role.toLowerCase() === 'admin') {
-      throw new UnauthorizedException();
-    }
-    const user_id = req.user._id;
-    return this.cartService.remove(productId, user_id);
-  }
-
-  // ======== For Admin ========== \\
-
-  //  @docs   Can Admin Get Any Cart of user
-  //  @Route  GET /api/v1/cart/admin/:userId
-  //  @access Private [Admin]
-  @Get('/admin/:userId')
-  @Roles(['admin'])
-  @UseGuards(AuthGuard)
-  findOneForAdmin(@Param('userId') userId: string) {
-    return this.cartService.findOneForAdmin(userId);
-  }
-  //  @docs   Can Admin Get All Carts
-  //  @Route  GET /api/v1/cart/admin
-  //  @access Private [Admin]
-  @Get('/admin')
-  @Roles(['admin'])
-  @UseGuards(AuthGuard)
-  findAllForAdmin() {
-    return this.cartService.findAllForAdmin();
+  remove(@Param('itemId') itemId: string, @Req() req) {
+    return this.cartService.removeItemFromCart(itemId, req.user._id);
   }
 }

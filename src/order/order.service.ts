@@ -1,321 +1,303 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { AcceptOrderCashDto, CreateOrderDto } from './dto/create-order.dto';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { CreateOrderDto } from './dto/create-order.dto';
+import { UpdateOrderDto } from './dto/update-order.dto';
 import { InjectModel } from '@nestjs/mongoose';
 import { Order } from './order.schema';
 import { Model } from 'mongoose';
 import { Cart } from 'src/cart/cart.schema';
-import { Tax } from 'src/tax/tax.schema';
-import { Product } from 'src/product/product.schema';
-import { MailerService } from '@nestjs-modules/mailer';
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const stripe = require('stripe')(
-  `sk_test_51QZW5bDG9eAcjg92snOaZ0tsxVe5hiu8zZ0OZLIJVVmE0EZE12uZCjq05V9TuzQbdAnQLke6MajzEo2kYJDPerDf00Qzy6iQhT`,
-);
+import { Settings } from 'src/settings/settings.schema';
+
+import Stripe from 'stripe';
+import { ApiFeatures } from 'src/utils/api-features.utils';
 
 @Injectable()
 export class OrderService {
+  [x: string]: any;
+  private stripe: Stripe;
   constructor(
-    @InjectModel(Order.name) private readonly orderModel: Model<Order>,
-    @InjectModel(Cart.name) private readonly cartModel: Model<Cart>,
-    @InjectModel(Tax.name) private readonly taxModel: Model<Tax>,
-    @InjectModel(Product.name) private readonly productModel: Model<Product>,
-    private readonly mailService: MailerService,
-  ) {}
-
-  async create(
-    user_id: string,
-    paymentMethodType: 'card' | 'cash',
-    createOrderDto: CreateOrderDto,
-    dataAfterPayment: {
-      success_url: string;
-      cancel_url: string;
-    },
+    @InjectModel('Order') private OrderModel: Model<Order>,
+    @InjectModel('Cart') private CartModel: Model<Cart>,
+    @InjectModel('Settings') private SettingsModel: Model<Settings>,
   ) {
-    const cart = await this.cartModel
-      .findOne({ user: user_id })
-      .populate('cartItems.productId user');
-    if (!cart) {
-      throw new NotFoundException('Cart not found');
-    }
-    const tax = await this.taxModel.findOne({});
-    // eslint-disable-next-line
-    // @ts-ignore
-    const shippingAddress = cart.user?.address
-      ? // eslint-disable-next-line
-        // @ts-ignore
-        cart.user.address
-      : createOrderDto.shippingAddress || false;
+    const secret = process.env.STRIPE_SECRET_KEY;
 
-    if (!shippingAddress) {
-      throw new NotFoundException('Shipping address not found');
+    if (!secret) {
+      throw new Error('ST_SECRET is not defined');
     }
 
-    const taxPrice = (tax?.taxPrice as unknown as number) || 0;
-    const shippingPrice = (tax?.shippingPrice as unknown as number) || 0;
-    // eslint-disable-next-line prefer-const
+    this.stripe = new Stripe(secret, {});
+  }
+
+  async create(createOrderDto: CreateOrderDto, userId: string) {
+    const cart = await this.CartModel.findOne({ userId }).populate({
+      path: 'cartItems.productId',
+      select: 'title',
+    });
+
+    if (!cart || cart.cartItems.length === 0) {
+      throw new NotFoundException('Cart is empty');
+    }
+    let settings = await this.SettingsModel.findOne();
+    if (!settings) {
+      settings = await this.SettingsModel.create({});
+    }
+
+    const shippingPrice = settings.shippingPrice;
+    const taxPercentage = settings.taxPercentage;
+
+    let subtotal = 0;
+
+    const orderItems = cart.cartItems.map((item: any) => {
+      const price = item.price;
+
+      subtotal += price * item.quantity;
+
+      return {
+        product: item.productId,
+        title: item.productId.title,
+        quantity: item.quantity,
+        price,
+      };
+    });
+
+    let discount = 0;
+    if (cart.totalPriceAfterDiscount) {
+      discount = subtotal - cart.totalPriceAfterDiscount;
+    }
+    console.log(discount);
+
+    const taxPrice = ((subtotal - discount) * taxPercentage) / 100;
+    const totalOrderPrice = subtotal + taxPrice + shippingPrice - discount;
+
     let data = {
-      user: user_id,
-      cartItems: cart.cartItems,
+      user: userId,
+      cartItems: orderItems,
       taxPrice,
       shippingPrice,
-      totalOrderPrice: cart.totalPrice + taxPrice + shippingPrice,
-      paymentMethodType,
-      shippingAddress,
+      totalOrderPrice,
+      shippingAddress: createOrderDto.shippingAddress,
     };
 
-    if (paymentMethodType === 'cash') {
-      // inser order in db
-      const order = await this.orderModel.create({
+    if (createOrderDto.paymentMethodType === 'cash') {
+      const order = await this.OrderModel.create({
         ...data,
-        isPaid: data.totalOrderPrice === 0 ? true : false,
-        paidAt: data.totalOrderPrice === 0 ? new Date() : null,
-        isDeliverd: false,
+        paymentMethodType: 'cash',
+        isPaid: false,
+        isDelivered: false,
       });
-      if (data.totalOrderPrice === 0) {
-        cart.cartItems.forEach(async (item) => {
-          await this.productModel.findByIdAndUpdate(
-            item.productId,
-            { $inc: { quantity: -item.quantity, sold: item.quantity } },
-            { new: true },
-          );
-        });
-        // reset Cart
-        await this.cartModel.findOneAndUpdate(
-          { user: user_id },
-          { cartItems: [], totalPrice: 0 },
-        );
-      }
+      await this.CartModel.findOneAndUpdate(
+        { userId },
+        {
+          $set: { cartItems: [], totalPrice: 0, totalPriceAfterDiscount: 0 },
+          $unset: { coupon: '' },
+        },
+      );
 
       return {
-        status: 200,
-        message: 'Order created successfully',
+        status: 'success',
+        message: 'Order created successfully (Cash)',
         data: order,
       };
     }
-    // call the payment gateway here (stripe, etc)
-    const line_items = cart.cartItems.map(({ productId, color }) => {
-      return {
-        price_data: {
-          currency: 'egp',
-          unit_amount: Math.round(data.totalOrderPrice * 100),
-          product_data: {
-            // eslint-disable-next-line
-            // @ts-ignore
-            name: productId.title,
-            // eslint-disable-next-line
-            // @ts-ignore
-            description: productId.description,
-            // eslint-disable-next-line
-            // @ts-ignore
-            images: [productId.imageCover, ...productId.images],
-            metadata: {
-              color,
+
+    if (createOrderDto.paymentMethodType === 'card') {
+      const order = await this.OrderModel.create({
+        ...data,
+        paymentMethodType: 'card',
+        isPaid: false,
+        isDelivered: false,
+      });
+
+      const session = await this.stripe.checkout.sessions.create({
+        payment_method_types: ['card'],
+        mode: 'payment',
+
+        line_items: [
+          ...orderItems.map((item) => ({
+            price_data: {
+              currency: 'egp',
+              product_data: {
+                name: item.title || 'Product',
+              },
+              unit_amount: item.price * 100,
             },
+            quantity: item.quantity,
+          })),
+          {
+            price_data: {
+              currency: 'egp',
+              product_data: {
+                name: 'Shipping Fee',
+              },
+              unit_amount: shippingPrice * 100,
+            },
+            quantity: 1,
           },
+          {
+            price_data: {
+              currency: 'egp',
+              product_data: {
+                name: 'Tax',
+              },
+              unit_amount: taxPrice * 100,
+            },
+            quantity: 1,
+          },
+        ],
+
+        success_url: 'http://localhost:3000/success',
+        cancel_url: 'http://localhost:3000/cancel',
+
+        metadata: {
+          orderId: order._id.toString(),
+          userId: userId.toString(),
         },
-        quantity: 1,
-      };
-    });
-
-    const session = await stripe.checkout.sessions.create({
-      line_items,
-      mode: 'payment',
-      success_url: dataAfterPayment.success_url,
-      cancel_url: dataAfterPayment.cancel_url,
-
-      client_reference_id: user_id.toString(),
-      // eslint-disable-next-line
-      // @ts-ignore
-      customer_email: cart.user.email,
-      metadata: {
-        address: data.shippingAddress,
-      },
-    });
-    // inser order in db
-    const order = await this.orderModel.create({
-      ...data,
-      sessionId: session.id,
-      isPaid: false,
-      isDeliverd: false,
-    });
-
-    return {
-      status: 200,
-      message: 'Order created successfully',
-      data: {
+      });
+      return {
+        status: 'success',
+        message: 'Stripe session created',
         url: session.url,
-        success_url: `${session.success_url}?session_id=${session.id}`,
-        cancel_url: session.cancel_url,
-        expires_at: new Date(session.expires_at * 1000),
-        sessionId: session.id,
-        totalPrice: session.amount_total,
-        data: order,
-      },
+      };
+    }
+    throw new BadRequestException('Invalid payment method');
+  }
+
+  async findAll(query: any, user: { _id: string; role: string }) {
+    const filter = user.role === 'admin' ? {} : { user: user._id };
+
+    const feature = new ApiFeatures<Order>(this.OrderModel.find(filter), query)
+      .filter()
+      .sort()
+      .limitFields()
+      .paginate();
+    const orders = await feature.query;
+    return {
+      status: 'success',
+      results: orders.length,
+      data: orders,
     };
   }
 
-  async updatePaidCash(orderId: string, updateOrderDto: AcceptOrderCashDto) {
-    const order = await this.orderModel.findById(orderId);
+  async findOne(id: string, user: { _id: string; role: string }) {
+    const filter =
+      user.role === 'admin' ? { _id: id } : { _id: id, user: user._id };
+
+    const order = await this.OrderModel.findOne(filter)
+      .populate({
+        path: 'cartItems.product',
+        select: 'title imageCover color',
+      })
+      .lean();
+
+    if (!order) {
+      throw new NotFoundException('order not found');
+    }
+    return {
+      status: 'success',
+      data: order,
+    };
+  }
+
+  async update(id: string, updateOrderDto: UpdateOrderDto) {
+    if (updateOrderDto.isDelivered === true) {
+      (updateOrderDto as any).deliveredAt = new Date();
+    }
+    if (updateOrderDto.isPaid === true) {
+      (updateOrderDto as any).paidAt = new Date();
+    }
+    const order = await this.OrderModel.findByIdAndUpdate(id, updateOrderDto, {
+      new: true,
+      runValidators: true,
+    });
     if (!order) {
       throw new NotFoundException('Order not found');
     }
 
-    if (order.paymentMethodType !== 'cash') {
-      throw new NotFoundException('This order not paid by cash');
-    }
-
-    if (order.isPaid) {
-      throw new NotFoundException('Order already paid');
-    }
-
-    if (updateOrderDto.isPaid) {
-      updateOrderDto.paidAt = new Date();
-      const cart = await this.cartModel
-        .findOne({ user: order.user.toString() })
-        .populate('cartItems.productId user');
-      cart.cartItems.forEach(async (item) => {
-        await this.productModel.findByIdAndUpdate(
-          item.productId,
-          { $inc: { quantity: -item.quantity, sold: item.quantity } },
-          { new: true },
-        );
-      });
-      // reset Cart
-      await this.cartModel.findOneAndUpdate(
-        { user: order.user.toString() },
-        { cartItems: [], totalPrice: 0 },
-      );
-
-      // send mail
-      const htmlMessage = `
-    <html>
-      <body>
-        <h1>Order Confirmation</h1>
-        <p>Dear ${cart.user.name},</p>
-        <p>Thank you for your purchase! Your order has been successfully placed and paid for with cash.</p>
-        <p>We appreciate your business and hope you enjoy your purchase!</p>
-        <p>Best regards,</p>
-        <p>The Ecommerce-Nest.JS Team</p>
-      </body>
-    </html>
-    `;
-
-      await this.mailService.sendMail({
-        from: `Ecommerce-Nest.JS <${process.env.MAIL_USER}>`,
-        // eslint-disable-next-line
-        // @ts-ignore
-        to: cart.user.email,
-        subject: `Ecommerce-Nest.JS - Checkout Order`,
-        html: htmlMessage,
-      });
-    }
-
-    if (updateOrderDto.isDeliverd) {
-      updateOrderDto.deliverdAt = new Date();
-    }
-
-    const updatedOrder = await this.orderModel.findByIdAndUpdate(
-      orderId,
-      { ...updateOrderDto },
-      { new: true },
-    );
-
     return {
-      status: 200,
-      message: 'Order updated successfully',
-      data: updatedOrder,
+      status: 'success',
+      message: 'order updated successfully',
+      data: order,
     };
   }
 
-  async updatePaidCard(payload: any, sig: any, endpointSecret: string) {
-    let event;
+  async remove(id: string) {
+    const order = await this.OrderModelrderModel.findByIdAndDelete(id);
+    if (!order) {
+      throw new NotFoundException('order not found');
+    }
+    return {
+      status: 'success',
+      message: 'order removed successfully',
+    };
+  }
+
+  /////
+  async handleWebhook(
+    body: Buffer,
+    sig: string,
+    endpointSecret: string | undefined,
+  ) {
+    if (!endpointSecret) {
+      throw new BadRequestException('Missing STRIPE_WEBHOOK_SECRET');
+    }
+
+    let event: Stripe.Event;
 
     try {
-      event = stripe.webhooks.constructEvent(payload, sig, endpointSecret);
+      event = this.stripe.webhooks.constructEvent(body, sig, endpointSecret);
     } catch (err) {
-      console.log(`Webhook Error: ${err.message}`);
-      return;
+      throw new BadRequestException(
+        `Webhook signature verification failed: ${err.message}`,
+      );
     }
 
-    // Handle the event
     switch (event.type) {
-      case 'checkout.session.completed':
-        const sessionId = event.data.object.id;
+      case 'checkout.session.completed': {
+        const session = event.data.object as Stripe.Checkout.Session;
+        const orderId = session.metadata?.orderId;
 
-        const order = await this.orderModel.findOne({ sessionId });
-        order.isPaid = true;
-        order.isDeliverd = true;
-        order.paidAt = new Date();
-        order.deliverdAt = new Date();
+        if (!orderId) {
+          throw new BadRequestException('No orderId in metadata');
+        }
 
-        const cart = await this.cartModel
-          .findOne({ user: order.user.toString() })
-          .populate('cartItems.productId user');
-
-        cart.cartItems.forEach(async (item) => {
-          await this.productModel.findByIdAndUpdate(
-            item.productId,
-            { $inc: { quantity: -item.quantity, sold: item.quantity } },
-            { new: true },
-          );
-        });
-
-        // reset Cart
-        await this.cartModel.findOneAndUpdate(
-          { user: order.user.toString() },
-          { cartItems: [], totalPrice: 0 },
-        );
-
-        await order.save();
-        await cart.save();
-
-        // send mail
-        const htmlMessage = `
-    <html>
-      <body>
-        <h1>Order Confirmation</h1>
-        <p>Dear ${cart.user.name},</p>
-        <p>Thank you for your purchase! Your order has been successfully placed and paid for with card.♥</p>
-        <p>We appreciate your business and hope you enjoy your purchase!</p>
-        <p>Best regards,</p>
-        <p>The Ecommerce-Nest.JS Team</p>
-      </body>
-    </html>
-    `;
-
-        await this.mailService.sendMail({
-          from: `Ecommerce-Nest.JS <${process.env.MAIL_USER}>`,
-          // eslint-disable-next-line
-          // @ts-ignore
-          to: cart.user.email,
-          subject: `Ecommerce-Nest.JS - Checkout Order`,
-          html: htmlMessage,
-        });
-
+        await this.markOrderAsPaid(orderId, session);
         break;
-      // ... handle other event types
+      }
+
+      case 'payment_intent.payment_failed': {
+        const paymentIntent = event.data.object as Stripe.PaymentIntent;
+        await this.markOrderAsFailed(paymentIntent);
+        break;
+      }
+
       default:
-        console.log(`Unhandled event type ${event.type}`);
+        console.log(`Unhandled event type: ${event.type}`);
     }
+
+    return { received: true };
   }
 
-  async findAllOrdersOnUser(user_id: string) {
-    const orders = await this.orderModel.find({ user: user_id });
-    return {
-      status: 200,
-      message: 'Orders found',
-      length: orders.length,
-      data: orders,
-    };
+  private async markOrderAsPaid(
+    orderId: string,
+    session: Stripe.Checkout.Session,
+  ) {
+    await this.OrderModel.findByIdAndUpdate(orderId, {
+      isPaid: true,
+      paidAt: new Date(),
+      paymentIntentId: session.payment_intent,
+      paidAmount: session.amount_total,
+      currency: session.currency,
+    });
   }
 
-  async findAllOrders() {
-    const orders = await this.orderModel.find({});
-    return {
-      status: 200,
-      message: 'Orders found',
-      length: orders.length,
-      data: orders,
-    };
+  private async markOrderAsFailed(paymentIntent: Stripe.PaymentIntent) {
+    await this.OrderModel.findOneAndUpdate(
+      { paymentIntentId: paymentIntent.id },
+      { paymentFailed: true },
+    );
   }
 }

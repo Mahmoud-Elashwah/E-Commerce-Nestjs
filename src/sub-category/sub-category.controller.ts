@@ -10,64 +10,48 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { SubCategoryService } from './sub-category.service';
-import { SubCreateCategoryDto } from './dto/create-sub-category.dto';
+import { CreateSubCategoryDto } from './dto/create-sub-category.dto';
 import { UpdateSubCategoryDto } from './dto/update-sub-category.dto';
 import { AuthGuard } from 'src/user/guard/auth.guard';
 import { Roles } from 'src/user/decorators/roles.decorator';
 
-@Controller('v1/sub-category')
+@Controller('sub-category')
 export class SubCategoryController {
   constructor(private readonly subCategoryService: SubCategoryService) {}
 
-  //  @docs   Admin Can create a new sub category
-  //  @Route  POST /api/v1/sub-category
-  //  @access Private [Amdin]
   @Post()
-  @Roles(['admin'])
   @UseGuards(AuthGuard)
+  @Roles(['admin'])
   create(
     @Body(new ValidationPipe({ forbidNonWhitelisted: true }))
-    subCreateCategoryDto: SubCreateCategoryDto,
+    createSubCategoryDto: CreateSubCategoryDto,
   ) {
-    return this.subCategoryService.create(subCreateCategoryDto);
+    return this.subCategoryService.create(createSubCategoryDto);
   }
 
-  //  @docs   Any User Can get sub categorys
-  //  @Route  GET /api/v1/sub-category
-  //  @access Public
   @Get()
   findAll() {
     return this.subCategoryService.findAll();
   }
 
-  //  @docs   Any User Can get any sub category
-  //  @Route  GET /api/v1/sub-category/:id
-  //  @access Public
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.subCategoryService.findOne(id);
   }
 
-  //  @docs   Admin Can update any sub category
-  //  @Route  UPDATE /api/v1/sub-category/:id
-  //  @access Private [Amdin]
   @Patch(':id')
-  @Roles(['admin'])
   @UseGuards(AuthGuard)
+  @Roles(['admin'])
   update(
     @Param('id') id: string,
-    @Body(new ValidationPipe({ forbidNonWhitelisted: true }))
-    UpdateSubCategoryDto: UpdateSubCategoryDto,
+    @Body() updateSubCategoryDto: UpdateSubCategoryDto,
   ) {
-    return this.subCategoryService.update(id, UpdateSubCategoryDto);
+    return this.subCategoryService.update(id, updateSubCategoryDto);
   }
 
-  //  @docs   Admin Can delete any sub category
-  //  @Route  DELETE /api/v1/sub-category/:id
-  //  @access Private [Amdin]
   @Delete(':id')
-  @Roles(['admin'])
   @UseGuards(AuthGuard)
+  @Roles(['admin'])
   remove(@Param('id') id: string) {
     return this.subCategoryService.remove(id);
   }

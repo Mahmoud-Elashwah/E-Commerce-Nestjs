@@ -1,105 +1,103 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import mongoose, { HydratedDocument } from 'mongoose';
-import { User } from '../user/user.schema';
-import { Product } from 'src/product/product.schema';
+import mongoose, { HydratedDocument, Types } from 'mongoose';
 
-export type orderDocument = HydratedDocument<Order>;
+export type OrderDocument = HydratedDocument<Order>;
 
 @Schema({ timestamps: true })
 export class Order {
   @Prop({
-    type: mongoose.Schema.Types.ObjectId,
+    type: Types.ObjectId,
+    ref: 'User',
     required: true,
   })
-  user: typeof User;
-  @Prop({
-    type: String,
-    required: false,
-  })
-  sessionId: string;
-  @Prop({
-    type: [
-      {
-        productId: {
-          type: mongoose.Schema.Types.ObjectId,
-          require: true,
-          ref: Product.name,
-        },
-        quantity: {
-          type: Number,
-          required: true,
-        },
-        color: {
-          type: String,
-          default: '',
-        },
-      },
-    ],
-  })
-  cartItems: [
+  user: Types.ObjectId;
+
+  @Prop([
     {
-      productId: {
-        _id: string;
-        price: number;
-        priceAfterDiscount: number;
-      };
-      quantity: number;
-      color: string;
+      product: {
+        type: Types.ObjectId,
+        ref: 'Product',
+        required: true,
+      },
+
+      quantity: {
+        type: Number,
+        default: 1,
+      },
+
+      color: String,
+
+      price: {
+        type: Number,
+        required: true,
+      },
+
+      priceAfterDiscount: Number,
     },
-  ];
+  ])
+  cartItems: {
+    product: Types.ObjectId;
+    quantity: number;
+    color: string;
+    price: number;
+    priceAfterDiscount?: number;
+  }[];
+
+  @Prop({ default: 0 })
+  taxPrice: number;
+
+  @Prop({ default: 0 })
+  shippingPrice: number;
+
+  @Prop({ required: true })
+  totalOrderPrice: number;
+
+  @Prop({ type: String, enum: ['cash', 'card'], required: true })
+  paymentMethodType: 'cash' | 'card';
+
+  @Prop({ default: false })
+  isPaid: boolean;
+
+  @Prop()
+  paidAt: Date;
+
+  @Prop({ default: false })
+  isDelivered: boolean;
+
+  @Prop()
+  deliveredAt: Date;
 
   @Prop({
-    type: Number,
-    required: false,
-    default: 0,
-  })
-  taxPrice: number;
-  @Prop({
-    type: Number,
-    required: false,
-    default: 0,
-  })
-  shippingPrice: number;
-  @Prop({
-    type: Number,
+    type: {
+      alias: String,
+      details: String,
+      phone: String,
+      city: String,
+      postalCode: String,
+    },
     required: true,
-    default: 0,
   })
-  totalOrderPrice: number;
-  @Prop({
-    type: String,
-    required: false,
-    default: 'card',
-    enum: ['cash', 'card'],
-  })
-  paymentMethodType: string;
-  @Prop({
-    type: Boolean,
-    required: false,
-    default: false,
-  })
-  isPaid: boolean;
-  @Prop({
-    type: Date,
-    required: false,
-  })
-  paidAt: Date;
-  @Prop({
-    type: Boolean,
-    required: false,
-    default: false,
-  })
-  isDeliverd: boolean;
-  @Prop({
-    type: Date,
-    required: false,
-  })
-  deliverdAt: Date;
-  @Prop({
-    type: String,
-    required: false,
-  })
-  shippingAddress: string;
+  shippingAddress: {
+    alias: string;
+    details: string;
+    phone: string;
+    city: string;
+    postalCode: string;
+  };
+
+  @Prop()
+  paymentIntentId?: string;
+
+  @Prop({ default: false })
+  paymentFailed?: boolean;
+
+  @Prop()
+  paidAmount?: number;
+
+  @Prop()
+  currency?: string;
 }
 
-export const orderSchema = SchemaFactory.createForClass(Order);
+export const OrderSchema = SchemaFactory.createForClass(Order);
+OrderSchema.index({ user: 1 });
+OrderSchema.index({ createdAt: -1 });

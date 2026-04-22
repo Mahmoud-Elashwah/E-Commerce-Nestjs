@@ -1,191 +1,106 @@
 import {
-  HttpException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
-  UnauthorizedException,
 } from '@nestjs/common';
 import { CreateReviewDto } from './dto/create-review.dto';
 import { UpdateReviewDto } from './dto/update-review.dto';
 import { InjectModel } from '@nestjs/mongoose';
+import { Model, Types } from 'mongoose';
 import { Review } from './review.schema';
-import { Model } from 'mongoose';
-import { Product } from 'src/product/product.schema';
-
-interface newUpdateReviewDto extends UpdateReviewDto {
-  user: string;
-}
+import { ApiFeatures } from 'src/utils/api-features.utils';
 
 @Injectable()
 export class ReviewService {
-  constructor(
-    @InjectModel(Review.name) private readonly reviewModule: Model<Review>,
-    @InjectModel(Product.name) private readonly productModule: Model<Product>,
-  ) {}
-  async create(createReviewDto: CreateReviewDto, user_id: string) {
-    const review = await this.reviewModule.findOne({
-      user: user_id,
-      product: createReviewDto.product,
+  constructor(@InjectModel('Review') private reviewModel: Model<Review>) {}
+
+  async create(createReviewDto: CreateReviewDto, userId: string) {
+    const existingReview = await this.reviewModel.findOne({
+      user: userId as any,
+      product: createReviewDto.product as any,
     });
 
-    if (review) {
-      throw new HttpException(
-        'This User already Created Review On this Product',
-        400,
-      );
+    if (existingReview) {
+      throw new ForbiddenException('You already reviewed this product');
     }
-
-    const newReview = await (
-      await this.reviewModule.create({
-        ...createReviewDto,
-        user: user_id,
-      })
-    ).populate('product user', 'name email title description imageCover');
-
-    // Rating in product module
-
-    const reviewsOnSingleProduct = await this.reviewModule
-      .find({
-        product: createReviewDto.product,
-      })
-      .select('rating');
-    const ratingsQuantity = reviewsOnSingleProduct.length;
-    if (ratingsQuantity > 0) {
-      let totalRatings: number = 0;
-      for (let i = 0; i < reviewsOnSingleProduct.length; i++) {
-        totalRatings += reviewsOnSingleProduct[i].rating;
-      }
-      const ratingsAverage = totalRatings / ratingsQuantity;
-
-      await this.productModule.findByIdAndUpdate(createReviewDto.product, {
-        ratingsAverage,
-        ratingsQuantity,
-      });
-    }
-    /*
-    Iphone 15      [ {rating: 5 hane}, {rating: 4 mahmoud18957321@gmail.com}]
-    
-    ratingsAverage= 4.5, (5+4) / 2 = 
-    
-ratingsQuantity=2
-
-*/
+    const createdReview = await this.reviewModel.create({
+      ...createReviewDto,
+      product: createReviewDto.product as any,
+      user: userId as any,
+    });
     return {
-      status: 200,
-      message: 'Review Created successfully',
-      data: newReview,
+      status: 'success',
+      message: 'Review created successfully',
+      data: createdReview,
     };
   }
 
-  async findAll(prodcut_id: string) {
-    const review = await this.reviewModule
-      .find({ product: prodcut_id })
-      .populate('user product', 'name email title')
-      .select('-__v');
+  async findAll(productId: string, query: any) {
+    const feature = new ApiFeatures<Review>(
+      this.reviewModel.find({ product: productId as any }),
+      query,
+    );
+
+    const reviews = await feature.query.populate('user', 'name email');
+
     return {
-      status: 200,
-      message: 'Reviews Found',
-      length: review.length,
-      data: review,
+      status: 'success',
+      results: reviews.length,
+      data: reviews,
     };
   }
 
-  async findOne(user_id: string) {
-    const review = await this.reviewModule
-      .find({ user: user_id })
-      .populate('user product', 'name role email title')
-      .select('-__v');
+  async findAllForOneUser(id: string, user: { _id: string; role: string }) {
+    if (user.role !== 'admin' && user._id.toString() !== id.toString()) {
+      throw new ForbiddenException('You can only view your own reviews');
+    }
+
+    const reviews = await this.reviewModel
+      .find({ user: id as any })
+      .populate('product', 'title category');
+
     return {
-      status: 200,
-      message: 'Reviews Found',
-      length: review.length,
-      data: review,
+      status: 'success',
+      results: reviews.length,
+      data: reviews,
     };
   }
 
-  async update(
-    id: string,
-    updateReviewDto: newUpdateReviewDto,
-    user_id: string,
-  ) {
-    const findReview = await this.reviewModule.findById(id);
-
-    if (!findReview) {
-      throw new NotFoundException('Not Found Review On this Id');
+  async update(id: string, updateReviewDto: UpdateReviewDto, userId: string) {
+    const review = await this.reviewModel.findById(id);
+    if (!review) {
+      throw new NotFoundException('Review not found');
     }
-
-    if (user_id.toString() !== findReview.user.toString()) {
-      throw new UnauthorizedException();
+    if (review.user.toString() !== userId.toString()) {
+      throw new ForbiddenException('You can only update your own review');
     }
-
-    const updateReview = await this.reviewModule
-      .findByIdAndUpdate(
-        id,
-        {
-          ...updateReviewDto,
-          user: user_id,
-          product: updateReviewDto.product,
-        },
-        { new: true },
-      )
-      .select('-__v');
-    // Rating in product module
-
-    const reviewsOnSingleProduct = await this.reviewModule
-      .find({
-        product: findReview.product,
-      })
-      .select('rating');
-    const ratingsQuantity = reviewsOnSingleProduct.length;
-
-    if (ratingsQuantity > 0) {
-      let totalRatings: number = 0;
-      for (let i = 0; i < reviewsOnSingleProduct.length; i++) {
-        totalRatings += reviewsOnSingleProduct[i].rating;
-      }
-      const ratingsAverage = totalRatings / ratingsQuantity;
-      await this.productModule.findByIdAndUpdate(findReview.product, {
-        ratingsAverage,
-        ratingsQuantity,
-      });
-    }
-
+    const updatedReview = await this.reviewModel.findByIdAndUpdate(
+      id,
+      {
+        reviewText: updateReviewDto.reviewText,
+        rating: updateReviewDto.rating,
+      },
+      { new: true },
+    );
     return {
-      status: 200,
-      message: 'Review Updated successfully',
-      data: updateReview,
+      status: 'success',
+      message: 'Review updated successfully',
+      data: updatedReview,
     };
   }
 
-  async remove(id: string, user_id: string): Promise<void> {
-    const findReview = await this.reviewModule.findById(id);
-
-    if (!findReview) {
-      throw new NotFoundException('Not Found Review On this Id');
+  async remove(id: string, userId: string) {
+    const review = await this.reviewModel.findById(id);
+    if (!review) {
+      throw new NotFoundException('Review not found');
     }
-    if (user_id.toString() !== findReview.user.toString()) {
-      throw new UnauthorizedException();
+    if (review.user.toString() !== userId.toString()) {
+      throw new ForbiddenException('You can only delete your own review');
     }
-    await this.reviewModule.findByIdAndDelete(id);
-    // Rating in product module
-    // Rating in product module
-
-    const reviewsOnSingleProduct = await this.reviewModule
-      .find({
-        product: findReview.product,
-      })
-      .select('rating');
-    const ratingsQuantity = reviewsOnSingleProduct.length;
-    if (ratingsQuantity > 0) {
-      let totalRatings: number = 0;
-      for (let i = 0; i < reviewsOnSingleProduct.length; i++) {
-        totalRatings += reviewsOnSingleProduct[i].rating;
-      }
-      const ratingsAverage = totalRatings / ratingsQuantity;
-
-      await this.productModule.findByIdAndUpdate(findReview.product, {
-        ratingsAverage,
-        ratingsQuantity,
-      });
-    }
+    await this.reviewModel.findByIdAndDelete(id);
+    return {
+      status: 'success',
+      message: 'Review deleted successfully',
+    };
   }
 }

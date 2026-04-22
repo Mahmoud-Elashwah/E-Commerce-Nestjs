@@ -6,7 +6,6 @@ import {
   Patch,
   Param,
   Delete,
-  ValidationPipe,
   UseGuards,
 } from '@nestjs/common';
 import { BrandService } from './brand.service';
@@ -15,17 +14,14 @@ import { UpdateBrandDto } from './dto/update-brand.dto';
 import { Roles } from 'src/user/decorators/roles.decorator';
 import { AuthGuard } from 'src/user/guard/auth.guard';
 
-@Controller('v1/brand')
+@Controller('brand')
 export class BrandController {
   constructor(private readonly brandService: BrandService) {}
 
   @Post()
-  @Roles(['admin'])
   @UseGuards(AuthGuard)
-  create(
-    @Body(new ValidationPipe({ forbidNonWhitelisted: true }))
-    createBrandDto: CreateBrandDto,
-  ) {
+  @Roles(['admin'])
+  create(@Body() createBrandDto: CreateBrandDto) {
     return this.brandService.create(createBrandDto);
   }
 
@@ -40,19 +36,15 @@ export class BrandController {
   }
 
   @Patch(':id')
-  @Roles(['admin'])
   @UseGuards(AuthGuard)
-  update(
-    @Param('id') id: string,
-    @Body(new ValidationPipe({ forbidNonWhitelisted: true }))
-    updateBrandDto: UpdateBrandDto,
-  ) {
+  @Roles(['admin'])
+  update(@Param('id') id: string, @Body() updateBrandDto: UpdateBrandDto) {
     return this.brandService.update(id, updateBrandDto);
   }
 
   @Delete(':id')
-  @Roles(['admin'])
   @UseGuards(AuthGuard)
+  @Roles(['admin'])
   remove(@Param('id') id: string) {
     return this.brandService.remove(id);
   }

@@ -13,9 +13,6 @@ export class CategoryService {
 
   async create(createCategoryDto: CreateCategoryDto) {
     const category = await this.categoryModel.create(createCategoryDto);
-    if (!category) {
-      throw new HttpException('error', 400);
-    }
     return {
       status: 'success',
       message: 'category successfully created',
@@ -24,27 +21,55 @@ export class CategoryService {
   }
 
   async findAll() {
-    const ctegorys = await this.categoryModel.find();
+    const categories = await this.categoryModel
+      .find()
+      .populate('subCategories', 'name -category')
+      .lean({ virtuals: true });
     return {
       status: 'success',
-      result: ctegorys.length,
-      data: ctegorys,
+      result: categories.length,
+      data: categories,
     };
   }
 
   async findOne(id: string) {
-    const category = await this.categoryModel.findById(id);
+    const category = await this.categoryModel
+      .findById(id)
+      .populate('subCategories', 'name -category')
+      .lean({ virtuals: true });
     if (!category) {
-      throw new NotFoundException();
+      throw new NotFoundException('category not found');
     }
-    return `This action returns a #${id} category`;
+    return {
+      status: 'success',
+      data: category,
+    };
   }
 
-  update(id: string, updateCategoryDto: UpdateCategoryDto) {
-    return `This action updates a #${id} category`;
+  async update(id: string, updateCategoryDto: UpdateCategoryDto) {
+    const category = await this.categoryModel.findByIdAndUpdate(
+      id,
+      updateCategoryDto,
+      { new: true, runValidators: true },
+    );
+    if (!category) {
+      throw new NotFoundException('category not found');
+    }
+    return {
+      status: 'success',
+      message: 'Category updated successfully',
+      data: category,
+    };
   }
 
-  remove(id: string) {
-    return `This action removes a #${id} category`;
+  async remove(id: string) {
+    const category = await this.categoryModel.findByIdAndDelete(id);
+    if (!category) {
+      throw new NotFoundException('category not found');
+    }
+    return {
+      status: 'success',
+      message: 'Category deleted successfully',
+    };
   }
 }

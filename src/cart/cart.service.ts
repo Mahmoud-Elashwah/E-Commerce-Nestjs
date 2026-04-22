@@ -1,286 +1,270 @@
-import { HttpException, Injectable, NotFoundException } from '@nestjs/common';
-import { UpdateCartItemsDto } from './dto/update-cart-items.dto';
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { CreateCartDto } from './dto/create-cart.dto';
+import { UpdateCartDto } from './dto/update-cart.dto';
+import { Model } from 'mongoose';
 import { InjectModel } from '@nestjs/mongoose';
 import { Cart } from './cart.schema';
-import { Model } from 'mongoose';
 import { Product } from 'src/product/product.schema';
+import { error } from 'console';
+import path from 'path';
 
 @Injectable()
 export class CartService {
   constructor(
-    @InjectModel(Cart.name) private readonly cartModule: Model<Cart>,
-    @InjectModel(Product.name) private readonly productModule: Model<Product>,
-    @InjectModel(Coupon.name) private readonly couponModule: Model<Coupon>,
+    @InjectModel('Cart') private readonly cartModel: Model<Cart>,
+    @InjectModel('product') private readonly productModel: Model<Product>,
   ) {}
 
-  async create(product_id: string, user_id: string, isElse?: boolean) {
-    const cart = await this.cartModule
-      .findOne({ user: user_id })
-      .populate('cartItems.productId', 'price priceAfterDiscount');
+  // async addToCart(createCartDto: CreateCartDto, userId: string) {
+  //     const { productId, quantity, color } = createCartDto;
+  //     const product = await this.productModel.findById(productId);
 
-    const product = await this.productModule.findById(product_id);
-    // not found this product
+  //     if (!product) {
+  //       throw new NotFoundException('Product not found');
+  //     }
+  //     const price = product.price;
+
+  //     const cart = await this.cartModel.findOne({ userId });
+
+  //     if (!cart) {
+  //       const newCart = new this.cartModel({
+  //         userId,
+  //         cartItems: [{ productId, quantity, color: color || '', price }],
+  //         totalPrice: price * quantity,
+  //       });
+  //       await newCart.save();
+  //       await newCart.populate({
+  //         path: 'cartItems.productId',
+  //         select: 'title',
+  //       });
+
+  //       return {
+  //         status: 'success',
+  //         message: 'Product added to cart successfully',
+  //         data: newCart,
+  //       };
+  //     }
+
+  //     const existingItemIndex = cart.cartItems.findIndex(
+  //       (item) =>
+  //         item.productId.toString() === productId &&
+  //         (item.color || '') === (color || ''),
+  //     );
+  //     if (existingItemIndex > -1) {
+  //       cart.cartItems[existingItemIndex].quantity += quantity;
+  //     } else {
+  //       cart.cartItems.push({ productId, quantity, color: color || '', price });
+  //     }
+  //     const totalPrice = cart.cartItems.reduce((total, item) => {
+  //       return total + item.price * item.quantity;
+  //     }, 0);
+
+  //     cart.totalPrice = totalPrice;
+
+  //     let discount = 0;
+
+  //     if (cart.coupon) {
+  //       discount = cart.coupon.discount || 0;
+  //     }
+
+  //     const totalPriceAfterDiscount = totalPrice - (totalPrice * discount) / 100;
+
+  //     cart.totalPriceAfterDiscount = Math.max(0, totalPriceAfterDiscount);
+
+  //     await cart.save();
+  //     await cart.populate({
+  //       path: 'cartItems.productId',
+  //       select: 'title',
+  //     });
+  //     return {
+  //       status: 'success',
+  //       message: 'Product added to cart successfully',
+  //       data: cart,
+  //     };
+  //   }
+
+  //version 2 with MongoDB Atomic Operators to
+
+  async addToCart(createCartDto: CreateCartDto, userId: string) {
+    const { productId, quantity } = createCartDto;
+
+    const product = await this.productModel.findById(productId);
+
     if (!product) {
-      throw new NotFoundException('Not Found Product');
+      throw new NotFoundException('Product not found');
     }
-    // quantity=0
-    if (product.quantity <= 0) {
-      throw new NotFoundException('Not Found quantity on this product');
-    }
+    const price = product.price;
 
-    // if user have cart=> insert product (productId)
-    if (cart) {
-      // add first product=> insert product in cart
-
-      const indexIfProductAlridyInsert = cart.cartItems.findIndex(
-        // -1 not found
-        (item) => item.productId._id.toString() === product_id.toString(),
-      );
-
-      if (indexIfProductAlridyInsert !== -1) {
-        cart.cartItems[indexIfProductAlridyInsert].quantity += 1;
-      } else {
-        // eslint-disable-next-line
-        // @ts-ignore
-        cart.cartItems.push({ productId: product_id, color: '', quantity: 1 });
-      }
-
-      await cart.populate('cartItems.productId', 'price priceAfterDiscount');
-
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      let totalPriceAfterInsert = 0;
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      let totalDiscountPriceAfterInsert = 0;
-
-      cart.cartItems.map((item) => {
-        totalPriceAfterInsert += item.quantity * item.productId.price;
-        totalDiscountPriceAfterInsert +=
-          item.quantity * item.productId.priceAfterDiscount;
-      });
-
-      cart.totalPrice = totalPriceAfterInsert - totalDiscountPriceAfterInsert;
-
-      await cart.save();
-      // add sacand product=> quantity+1
-      if (isElse) {
-        return cart;
-      } else {
-        return {
-          status: 200,
-          message: 'Created Cart and Insert Product',
-          data: cart,
-        };
-      }
-    } else {
-      // else user don't have cart=> create cart
-
-      await this.cartModule.create({
-        cartItems: [],
-        totalPrice: 0,
-        user: user_id,
-      });
-      const inserProduct = await this.create(
-        product_id,
-        user_id,
-        (isElse = true),
-      );
-      return {
-        status: 200,
-        message: 'Created Cart and Insert Product',
-        data: inserProduct,
-      };
-    }
-  }
-
-  async applyCoupon(user_id: string, couponName: string) {
-    const cart = await this.cartModule.findOne({ user: user_id });
-    const coupon = await this.couponModule.findOne({ name: couponName });
+    let cart = await this.cartModel.findOneAndUpdate(
+      {
+        userId,
+        cartItems: {
+          $elemMatch: {
+            productId,
+          },
+        },
+      },
+      {
+        $inc: { 'cartItems.$.quantity': quantity },
+      },
+      { new: true },
+    );
 
     if (!cart) {
-      throw new NotFoundException('Not Found Cart');
-    }
-    if (!coupon) {
-      throw new HttpException('Invalid coupon', 400);
-    }
-    const isExpired = new Date(coupon.expireDate) > new Date();
-    if (!isExpired) {
-      throw new HttpException('Invalid coupon', 400);
-    }
-
-    const ifCouponAlredyUsed = cart.coupons.findIndex(
-      (item) => item.name === couponName,
-    );
-    if (ifCouponAlredyUsed !== -1) {
-      throw new HttpException('Coupon alredy used', 400);
+      cart = await this.cartModel.findOneAndUpdate(
+        { userId },
+        {
+          $push: {
+            cartItems: { productId, quantity, price },
+          },
+        },
+        { upsert: true, new: true },
+      );
     }
 
-    if (cart.totalPrice <= 0) {
-      throw new HttpException('You have full discount', 400);
+    if (!cart) {
+      throw new NotFoundException('Failed to initialize cart');
     }
 
-    cart.coupons.push({ name: coupon.name, couponId: coupon._id.toString() });
-    cart.totalPrice = cart.totalPrice - coupon.discount;
+    const totalPrice = cart.cartItems.reduce((total, item) => {
+      return total + item.price * item.quantity;
+    }, 0);
+
+    const discount = cart.coupon?.discount || 0;
+    const discountAmount = (totalPrice * discount) / 100;
+
+    cart.totalPrice = totalPrice;
+    cart.totalPriceAfterDiscount = Math.max(0, totalPrice - discountAmount);
+
     await cart.save();
-
+    await cart.populate({
+      path: 'cartItems.productId',
+      select: 'title color',
+    });
     return {
-      status: 200,
-      message: 'Coupon Applied',
+      status: 'success',
+      message: 'Product added to cart successfully',
       data: cart,
     };
   }
 
-  async findOne(user_id: string) {
-    const cart = await this.cartModule
-      .findOne({ user: user_id })
-      .populate('cartItems.productId', 'price title description')
-      .select('-__v');
-    if (!cart) {
-      throw new NotFoundException(
-        `You don't hava a cart please go to add prducts`,
-      );
-    }
+  async findOne(id: string, user: { _id: string; role: string }) {
+    const filter =
+      user.role === 'admin' ? { _id: id } : { _id: id, userId: user._id };
 
+    const cart = await this.cartModel
+      .findOne(filter)
+      .populate({
+        path: 'cartItems.productId',
+        select: 'title imageCover color',
+      })
+      .lean();
+
+    if (!cart) {
+      throw new NotFoundException('Cart not found');
+    }
     return {
-      status: 200,
-      message: 'Found Cart',
+      status: 'success',
       data: cart,
     };
   }
 
   async update(
     productId: string,
-    user_id: string,
-    updateCartItemsDto: UpdateCartItemsDto,
+    updateCartDto: UpdateCartDto,
+    userId: string,
   ) {
-    const cart = await this.cartModule
-      .findOne({ user: user_id })
-      .populate(
-        'cartItems.productId',
-        'price title description priceAfterDiscount _id',
+    const { quantity } = updateCartDto;
+    let cart;
+    if (quantity === 0) {
+      cart = await this.cartModel.findOneAndUpdate(
+        { userId, cartItems: { productId } },
+        {
+          $pull: {
+            cartItems: {
+              productId,
+            },
+          },
+        },
+        { new: true },
       );
-
-    const product = await this.productModule.findById(productId);
+    } else {
+      cart = await this.cartModel.findOneAndUpdate(
+        {
+          userId,
+          'cartItems.productId': productId,
+        },
+        {
+          $set: {
+            'cartItems.$.quantity': quantity,
+          },
+        },
+        { new: true },
+      );
+    }
 
     if (!cart) {
-      const result = await this.create(productId, user_id);
-      return result;
+      throw new NotFoundException('item not found');
     }
 
-    const indexProductUpdate = cart.cartItems.findIndex(
-      (item) => item.productId._id.toString() === productId.toString(),
-    );
+    const totalPrice = cart.cartItems.reduce((total, item) => {
+      return total + item.price * item.quantity;
+    }, 0);
 
-    if (indexProductUpdate === -1) {
-      throw new NotFoundException('Not Found any product in cart');
-    }
+    const discount = cart.coupon?.discount || 0;
+    const discountAmount = (totalPrice * discount) / 100;
 
-    // update color
-    if (updateCartItemsDto.color) {
-      cart.cartItems[indexProductUpdate].color = updateCartItemsDto.color;
-    }
-    // update quantity
-    if (updateCartItemsDto.quantity > product.quantity) {
-      throw new NotFoundException('Not Found quantity on this product');
-    }
-
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    let totalPriceAfterUpdated = 0;
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    let totalDiscountPriceAfterUpdate = 0;
-
-    if (updateCartItemsDto.quantity) {
-      cart.cartItems[indexProductUpdate].quantity = updateCartItemsDto.quantity;
-      cart.cartItems.map((item) => {
-        totalPriceAfterUpdated += item.quantity * item.productId.price;
-        totalDiscountPriceAfterUpdate +=
-          item.quantity * item.productId.priceAfterDiscount;
-      });
-      cart.totalPrice = totalPriceAfterUpdated - totalDiscountPriceAfterUpdate;
-    }
+    cart.totalPrice = totalPrice;
+    cart.totalPriceAfterDiscount = Math.max(0, totalPrice - discountAmount);
 
     await cart.save();
+    await cart.populate({ path: 'cartItems.productId', select: 'title color' });
+
     return {
-      status: 200,
-      message: 'Product Updated',
+      status: 'success',
+      message: 'Cart updated successfully',
       data: cart,
     };
   }
 
-  async remove(productId: string, user_id: string) {
-    const cart = await this.cartModule
-      .findOne({ user: user_id })
-      .populate(
-        'cartItems.productId',
-        'price title description priceAfterDiscount _id',
-      );
+  async removeItemFromCart(itemId: string, userId: string) {
+    const cart = await this.cartModel.findOneAndUpdate(
+      {
+        userId,
+        'cartItems.productId': itemId,
+      },
+      {
+        $pull: {
+          cartItems: {
+            productId: itemId,
+          },
+        },
+      },
+      {
+        new: true,
+      },
+    );
+
     if (!cart) {
-      throw new NotFoundException('Not Found Cart');
-    }
-    const indexProductUpdate = cart.cartItems.findIndex(
-      (item) => item.productId._id.toString() === productId.toString(),
-    );
-    if (indexProductUpdate === -1) {
-      throw new NotFoundException('Not Found any product in cart');
+      throw new NotFoundException('Product not found');
     }
 
-    // eslint-disable-next-line
-    // @ts-ignore
-    cart.cartItems = cart.cartItems.filter(
-      (item, index) => index !== indexProductUpdate,
-    );
+    const totalPrice = cart.cartItems.reduce((total, item) => {
+      return total + item.price * item.quantity;
+    }, 0);
 
-    // update price after delete product
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    let totalPriceAfterInsert = 0;
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    let totalDiscountPriceAfterInsert = 0;
+    const discount = cart.coupon?.discount || 0;
+    const discountAmount = (totalPrice * discount) / 100;
 
-    cart.cartItems.map((item) => {
-      totalPriceAfterInsert += item.quantity * item.productId.price;
-      totalDiscountPriceAfterInsert +=
-        item.quantity * item.productId.priceAfterDiscount;
-    });
-
-    cart.totalPrice = totalPriceAfterInsert - totalDiscountPriceAfterInsert;
+    cart.totalPrice = totalPrice;
+    cart.totalPriceAfterDiscount = Math.max(0, totalPrice - discountAmount);
 
     await cart.save();
 
     return {
-      status: 200,
-      message: 'Deleted Product',
+      status: 'success',
+      message: 'Item removed successfully',
       data: cart,
-    };
-  }
-
-  // ===== For Admin ======== \\
-
-  async findOneForAdmin(userId: string) {
-    const cart = await this.cartModule
-      .findOne({ user: userId })
-      .populate('cartItems.productId', 'price title description');
-    if (!cart) {
-      throw new NotFoundException('Not Found Cart');
-    }
-    return {
-      status: 200,
-      message: 'Found Cart',
-      data: cart,
-    };
-  }
-
-  async findAllForAdmin() {
-    const carts = await this.cartModule
-      .find()
-      .select('-__v')
-      .populate(
-        'cartItems.productId user coupons.couponId',
-        'name email expireDate price title description',
-      );
-    return {
-      status: 200,
-      message: 'Found All Carts',
-      length: carts.length,
-      data: carts,
     };
   }
 }

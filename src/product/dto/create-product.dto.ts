@@ -1,66 +1,87 @@
 import {
-  IsArray,
   IsMongoId,
+  IsNotEmpty,
   IsNumber,
   IsOptional,
   IsString,
-  IsUrl,
   Max,
   Min,
   MinLength,
 } from 'class-validator';
+import { Transform, Type } from 'class-transformer';
 
 export class CreateProductDto {
-  @IsString({ message: 'Title Must be a String' })
-  @MinLength(3, { message: 'Title must be at least 3 characters' })
+  @IsString()
+  @MinLength(3)
+  @IsNotEmpty()
   title: string;
 
-  @IsString({ message: 'Description Must be a String' })
-  @MinLength(20, { message: 'Description must be at least 20 characters' })
+  @IsString()
+  @MinLength(20)
+  @IsNotEmpty()
   description: string;
 
-  @IsNumber({}, { message: 'quantity Must be a Number' })
-  @Min(1, { message: 'quantity must be at least 1 characters' })
+  @Type(() => Number)
+  @Transform(({ value }) => value ?? 1)
+  @Min(1)
+  @Max(20)
+  @IsNumber()
   quantity: number;
 
-  @IsString({ message: 'imageCover Must be a String' })
-  @IsUrl({}, { message: 'imageCover Must be a URL' })
+  @IsString()
+  @IsNotEmpty()
   imageCover: string;
 
-  @IsArray({ message: 'Images Must be an array' })
   @IsOptional()
-  images: string[];
+  @IsString({ each: true })
+  images?: string[];
 
-  @IsNumber({}, { message: 'sold Must be a Number' })
   @IsOptional()
-  sold: number;
+  @Type(() => Number)
+  @Transform(({ value }) => value ?? 0)
+  @IsNumber()
+  sold?: number;
 
-  @IsNumber({}, { message: 'Price Must be a Number' })
-  @Min(1, { message: 'price must be at least 1 L.E' })
-  @Max(20000, { message: 'price must be at max 20000 L.E' })
+  @Type(() => Number)
+  @Min(0)
+  @IsNumber()
+  @IsNotEmpty()
   price: number;
 
   @IsOptional()
-  @IsNumber({}, { message: 'priceAfterDiscount Must be a Number' })
-  @Min(1, { message: 'priceAfterDiscount must be at least 1 L.E' })
-  @Max(20000, { message: 'priceAfterDiscount must be at max 20000 L.E' })
-  priceAfterDiscount: number;
+  @Type(() => Number)
+  @Transform(({ value }) => value ?? 0)
+  @Min(0)
+  @IsNumber()
+  priceAfterDiscount?: number;
 
   @IsOptional()
-  @IsArray({ message: 'Images Must be an array' })
-  colors: string[];
+  @IsString({ each: true })
+  color?: string;
 
-  @IsString({ message: 'category Must be a String' })
-  @IsMongoId({ message: 'category Must be MongoId' })
+  @IsMongoId()
+  @IsNotEmpty()
   category: string;
 
   @IsOptional()
-  @IsString({ message: 'subCategory Must be a String' })
-  @IsMongoId({ message: 'subCategory Must be MongoId' })
-  subCategory: string;
+  @IsMongoId()
+  subCategory?: string;
 
   @IsOptional()
-  @IsString({ message: 'brand Must be a String' })
-  @IsMongoId({ message: 'brand Must be MongoId' })
-  brand: string;
+  @IsMongoId()
+  brand?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @Min(1)
+  @Max(5)
+  @IsNumber()
+  ratingAverage?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @Transform(({ value }) => value ?? 0)
+  @Min(0)
+  @IsNumber()
+  ratingQuantity?: number;
 }

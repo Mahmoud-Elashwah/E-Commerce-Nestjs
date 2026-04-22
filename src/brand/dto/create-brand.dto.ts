@@ -1,10 +1,10 @@
-import { IsString, IsUrl, MaxLength, MinLength } from 'class-validator';
+import { IsNotEmpty, IsString, IsUrl } from 'class-validator';
 
 export class CreateBrandDto {
-  @IsString({ message: 'name must be a string' })
-  @MaxLength(20, { message: 'name must be at most 100 characters' })
+  @IsString()
+  @IsNotEmpty()
   name: string;
-  @IsString({ message: 'image must be a string' })
-  @IsUrl({}, { message: 'image must be a valid URL' })
+  @IsString()
+  @IsUrl()
   image: string;
 }

@@ -1,8 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import mongoose, { HydratedDocument } from 'mongoose';
-import { Brand } from 'src/brand/brand.schema';
-import { Category } from 'src/category/category.schema';
-import { SubCategory } from 'src/sub-category/sub-category.schema';
 
 export type productDocument = HydratedDocument<Product>;
 
@@ -10,88 +7,64 @@ export type productDocument = HydratedDocument<Product>;
 export class Product {
   @Prop({
     type: String,
-    required: true,
-    min: [3, 'Title must be at least 3 characters'],
+    minlength: 3,
   })
   title: string;
+
   @Prop({
     type: String,
+    minlength: 20,
     required: true,
-    min: [20, 'Description must be at least 20 characters'],
   })
   description: string;
+
   @Prop({
     type: Number,
-    required: true,
+    min: 1,
+    max: 20,
     default: 1,
-    min: [1, 'Description must be at least 1 product'],
+    required: true,
   })
   quantity: number;
-  @Prop({
-    type: String,
-    required: true,
-  })
+
+  @Prop({ type: String, required: true })
   imageCover: string;
-  @Prop({
-    type: Array,
-    required: false,
-  })
+
+  @Prop({ type: [String] })
   images: string[];
-  @Prop({
-    type: Number,
-    required: false,
-    default: 0,
-  })
+
+  @Prop({ type: Number, default: 0 })
   sold: number;
-  @Prop({
-    type: Number,
-    required: true,
-    min: [1, 'Price must be at least 1 L.E'],
-    max: [20000, 'Price must be at least 20000 L.E'],
-  })
+
+  @Prop({ type: Number, required: true, min: 0 })
   price: number;
-  @Prop({
-    type: Number,
-    required: false,
-    default: 0,
-    max: [20000, 'Price must be at least 20000 L.E'],
-  })
+
+  @Prop({ type: Number, default: 0, min: 0 })
   priceAfterDiscount: number;
-  @Prop({
-    type: Array,
-    required: false,
-  })
-  colors: string[];
+
+  @Prop({ type: String })
+  color: string;
+
   @Prop({
     type: mongoose.Schema.Types.ObjectId,
+    ref: 'Category',
     required: true,
-    ref: Category.name,
   })
   category: string;
-  @Prop({
-    type: mongoose.Schema.Types.ObjectId,
-    required: false,
-    ref: SubCategory.name,
-  })
+
+  @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'SubCategory' })
   subCategory: string;
-  @Prop({
-    type: mongoose.Schema.Types.ObjectId,
-    required: false,
-    ref: Brand.name,
-  })
+
+  @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'Brand' })
   brand: string;
-  @Prop({
-    type: Number,
-    required: false,
-    default: 0,
-  })
-  ratingsAverage: number;
-  @Prop({
-    type: Number,
-    required: false,
-    default: 0,
-  })
-  ratingsQuantity: number;
+
+  @Prop({ type: Number, min: 0, max: 5, default: 0 })
+  ratingAverage?: number;
+
+  @Prop({ type: Number, default: 0 })
+  ratingQuantity?: number;
 }
 
 export const productSchema = SchemaFactory.createForClass(Product);
+
+productSchema.index({ title: 1, color: 1 }, { unique: true });

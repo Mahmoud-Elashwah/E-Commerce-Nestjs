@@ -1,4 +1,19 @@
-import { PartialType } from '@nestjs/mapped-types';
-import { CreateOrderDto } from './create-order.dto';
+import { IsBoolean, IsOptional, IsDateString } from 'class-validator';
 
-export class UpdateOrderDto extends PartialType(CreateOrderDto) {}
+export class UpdateOrderDto {
+  @IsBoolean()
+  @IsOptional()
+  isPaid?: boolean;
+
+  @IsBoolean()
+  @IsOptional()
+  isDelivered?: boolean;
+
+  @IsDateString()
+  @IsOptional()
+  paidAt?: Date;
+
+  @IsDateString()
+  @IsOptional()
+  deliveredAt?: Date;
+}
