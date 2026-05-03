@@ -18,6 +18,7 @@ import { ReviewModule } from './review/review.module';
 import { CartModule } from './cart/cart.module';
 import { OrderModule } from './order/order.module';
 import { SettingsModule } from './settings/settings.module';
+import { OauthModule } from './oauth/oauth.module';
 
 @Module({
   imports: [
@@ -55,6 +56,7 @@ import { SettingsModule } from './settings/settings.module';
     CartModule,
     OrderModule,
     SettingsModule,
+    OauthModule,
   ],
   controllers: [AppController],
   providers: [AppService],
