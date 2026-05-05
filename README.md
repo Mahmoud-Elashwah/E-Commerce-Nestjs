@@ -289,9 +289,14 @@ Create a `.env` file in the root directory:
 
 ```env
 PORT=3000
-MONGO_URI=your_mongodb_connection_string
+DB=your_mongodb_connection_string
 JWT_SECRET=your_jwt_secret_key
 STRIPE_SECRET_KEY=your_stripe_secret_key
+STRIPE_WEBHOOK_SECRET
+CLIENT_ID_GOOGLE
+CLIENT_SECRET_GOOGLE
+CLIENT_CALLBACK
+
 ```
 
 ### 🚀 Running the App
